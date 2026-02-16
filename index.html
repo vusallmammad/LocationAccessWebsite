@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Country Change Form</title>
     <style>
-        /* Simple CSS for layout and design */
         body {
             font-family: Arial, sans-serif;
             background-color: #f4f4f9;
@@ -42,9 +41,37 @@
             background-color: #4CAF50;
             color: white;
             cursor: pointer;
+            font-size: 16px;
         }
         button:hover {
             background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #statusMessage {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 4px;
+            text-align: center;
+            display: none;
+            font-weight: bold;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .loading {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
         }
     </style>
 </head>
@@ -53,36 +80,47 @@
         <h1>Country Change Request</h1>
         <form id="countryChangeForm">
             <label for="userPrincipalName">User Principal Name (UPN)</label>
-            <input type="email" id="userPrincipalName" name="userPrincipalName" required>
+            <input type="email" id="userPrincipalName" name="userPrincipalName" placeholder="user@dynamica.az" required>
 
             <label for="country">Country</label>
             <select id="country" name="country" required>
+                <option value="">-- Select a Country --</option>
                 <option value="Azerbaijan">Azerbaijan</option>
                 <option value="Russia">Russia</option>
                 <option value="Germany">Germany</option>
                 <option value="United States">United States</option>
             </select>
 
-            <button type="submit">Submit</button>
+            <button type="submit" id="submitBtn">Submit</button>
         </form>
+        <div id="statusMessage"></div>
     </div>
 
     <script>
-        // Handle form submission
+        const FUNCTION_URL = 'https://triggerapp-a7bxb7etggb7eddf.centralindia-01.azurewebsites.net/api/Dtrigger?code=jvi4A7WNO5KglvoJBsrSWR3WlPNfkaF0rIWb4_3NrSIiAzFur0h69A==';
+
         document.getElementById("countryChangeForm").addEventListener("submit", async function (e) {
             e.preventDefault();
 
+            const submitBtn = document.getElementById("submitBtn");
+            const statusMessage = document.getElementById("statusMessage");
             const userPrincipalName = document.getElementById("userPrincipalName").value;
             const country = document.getElementById("country").value;
+
+            // Show loading state
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Submitting...";
+            statusMessage.className = "loading";
+            statusMessage.textContent = "Submitting country change request...";
+            statusMessage.style.display = "block";
 
             const requestBody = {
                 UserPrincipalName: userPrincipalName,
                 Country: country
             };
 
-            // Send request to Azure Function
             try {
-                const response = await fetch('damntriggers-anezfmfvaqe0a5dk.canadacentral-01.azurewebsites.net', {
+                const response = await fetch(FUNCTION_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -92,12 +130,20 @@
 
                 if (response.ok) {
                     const result = await response.json();
-                    alert("Request submitted successfully: " + result.message);
+                    statusMessage.className = "success";
+                    statusMessage.textContent = "Success! " + result.message;
                 } else {
-                    throw new Error("Error submitting the request.");
+                    const errorResult = await response.json().catch(() => null);
+                    const errorMsg = errorResult?.message || "Error submitting the request.";
+                    statusMessage.className = "error";
+                    statusMessage.textContent = "Failed: " + errorMsg;
                 }
             } catch (error) {
-                alert("An error occurred: " + error.message);
+                statusMessage.className = "error";
+                statusMessage.textContent = "An error occurred: " + error.message;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Submit";
             }
         });
     </script>
