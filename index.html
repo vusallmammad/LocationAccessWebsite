@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +12,7 @@
             margin: 0;
             padding: 0;
         }
+
         .container {
             max-width: 600px;
             margin: 50px auto;
@@ -19,17 +21,22 @@
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
             border-radius: 8px;
         }
+
         h1 {
             text-align: center;
             color: #333;
         }
+
         label {
             display: block;
             margin-bottom: 10px;
             font-weight: bold;
             color: #555;
         }
-        input, select, button {
+
+        input,
+        select,
+        button {
             width: 100%;
             padding: 10px;
             margin: 10px 0;
@@ -37,19 +44,23 @@
             border: 1px solid #ccc;
             box-sizing: border-box;
         }
+
         button {
             background-color: #4CAF50;
             color: white;
             cursor: pointer;
             font-size: 16px;
         }
+
         button:hover {
             background-color: #45a049;
         }
+
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
         }
+
         #statusMessage {
             margin-top: 15px;
             padding: 12px;
@@ -58,30 +69,40 @@
             display: none;
             font-weight: bold;
         }
+
         .success {
             background-color: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
         }
+
         .error {
             background-color: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+
         .loading {
             background-color: #fff3cd;
             color: #856404;
             border: 1px solid #ffeeba;
         }
+
+        #userPrincipalName[readonly] {
+            background-color: #f1f1f1;
+            color: #666;
+            cursor: not-allowed;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>Country Change Request</h1>
         <form id="countryChangeForm">
             <label for="userPrincipalName">User Principal Name (UPN)</label>
-            <input type="email" id="userPrincipalName" name="userPrincipalName" placeholder="user@dynamica.az" required>
-
+            <input type="email" id="userPrincipalName" name="userPrincipalName" placeholder="Loading..." required
+                readonly />
             <label for="country">Country</label>
             <select id="country" name="country" required>
                 <option value="">-- Select a Country --</option>
@@ -96,56 +117,119 @@
         <div id="statusMessage"></div>
     </div>
 
-    <script>
-        const FUNCTION_URL = 'https://triggerapp-a7bxb7etggb7eddf.centralindia-01.azurewebsites.net/api/Dtrigger?code=jvi4A7WNO5KglvoJBsrSWR3WlPNfkaF0rIWb4_3NrSIiAzFur0h69A==';
+<script>
+  const FUNCTION_URL =
+    "https://triggerapp-a7bxb7etggb7eddf.centralindia-01.azurewebsites.net/api/Dtrigger?code=jvi4A7WNO5KglvoJBsrSWR3WlPNfkaF0rIWb4_3NrSIiAzFur0h69A==";
 
-        document.getElementById("countryChangeForm").addEventListener("submit", async function (e) {
-            e.preventDefault();
+  async function ensureSignedInAndSetUpn() {
+    const upnInput = document.getElementById("userPrincipalName");
+    const submitBtn = document.getElementById("submitBtn");
+    const statusMessage = document.getElementById("statusMessage");
 
-            const submitBtn = document.getElementById("submitBtn");
-            const statusMessage = document.getElementById("statusMessage");
-            const userPrincipalName = document.getElementById("userPrincipalName").value;
-            const country = document.getElementById("country").value;
+    submitBtn.disabled = true;
+    upnInput.readOnly = true;
+    upnInput.value = "Loading...";
 
-            // Show loading state
-            submitBtn.disabled = true;
-            submitBtn.textContent = "Submitting...";
-            statusMessage.className = "loading";
-            statusMessage.textContent = "Submitting country change request...";
-            statusMessage.style.display = "block";
+    try {
+      const r = await fetch("/.auth/me", { cache: "no-store" });
 
-            const requestBody = {
-                UserPrincipalName: userPrincipalName,
-                Country: country
-            };
+      // Not signed in: redirect to Entra login
+      if (!r.ok) {
+        const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = "/.auth/login/aad?post_login_redirect_uri=" + returnTo;
+        return;
+      }
 
-            try {
-                const response = await fetch(FUNCTION_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(requestBody)
-                });
+      const data = await r.json();
+      const cp = data?.clientPrincipal;
 
-                if (response.ok) {
-                    const result = await response.json();
-                    statusMessage.className = "success";
-                    statusMessage.textContent = "Success! " + result.message;
-                } else {
-                    const errorResult = await response.json().catch(() => null);
-                    const errorMsg = errorResult?.message || "Error submitting the request.";
-                    statusMessage.className = "error";
-                    statusMessage.textContent = "Failed: " + errorMsg;
-                }
-            } catch (error) {
-                statusMessage.className = "error";
-                statusMessage.textContent = "An error occurred: " + error.message;
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = "Submit";
-            }
+      const upn =
+        cp?.userDetails ||
+        cp?.claims?.find((c) => c.typ === "preferred_username")?.val ||
+        cp?.claims?.find((c) => c.typ === "upn")?.val;
+
+      if (!upn) {
+        statusMessage.className = "error";
+        statusMessage.textContent = "Signed in, but could not read your UPN.";
+        statusMessage.style.display = "block";
+        upnInput.value = "";
+        return;
+      }
+
+      // Fill and lock the UPN field
+      upnInput.value = upn;
+      upnInput.readOnly = true;
+
+      // Optional: allow only your domain
+      // const allowedDomain = "dynamica.az";
+      // if (!upn.toLowerCase().endsWith("@" + allowedDomain)) {
+      //   statusMessage.className = "error";
+      //   statusMessage.textContent = "Access denied for this account domain.";
+      //   statusMessage.style.display = "block";
+      //   submitBtn.disabled = true;
+      //   return;
+      // }
+
+      submitBtn.disabled = false;
+    } catch (e) {
+      statusMessage.className = "error";
+      statusMessage.textContent = "Auth check failed: " + e.message;
+      statusMessage.style.display = "block";
+      upnInput.value = "";
+      submitBtn.disabled = true;
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    ensureSignedInAndSetUpn();
+
+    document.getElementById("countryChangeForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const submitBtn = document.getElementById("submitBtn");
+      const statusMessage = document.getElementById("statusMessage");
+      const userPrincipalName = document.getElementById("userPrincipalName").value;
+      const country = document.getElementById("country").value;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Submitting...";
+      statusMessage.className = "loading";
+      statusMessage.textContent = "Submitting country change request...";
+      statusMessage.style.display = "block";
+
+      const requestBody = {
+        UserPrincipalName: userPrincipalName,
+        Country: country
+      };
+
+      try {
+        const response = await fetch(FUNCTION_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody)
         });
-    </script>
+
+        if (response.ok) {
+          const result = await response.json();
+          statusMessage.className = "success";
+          statusMessage.textContent = "Success! " + (result.message || "");
+        } else {
+          const errorResult = await response.json().catch(() => null);
+          const errorMsg = errorResult?.message || "Error submitting the request.";
+          statusMessage.className = "error";
+          statusMessage.textContent = "Failed: " + errorMsg;
+        }
+      } catch (error) {
+        statusMessage.className = "error";
+        statusMessage.textContent = "An error occurred: " + error.message;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit";
+      }
+    });
+  });
+</script>
+
 </body>
+
 </html>
